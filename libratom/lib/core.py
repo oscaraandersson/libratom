@@ -1,10 +1,11 @@
 # pylint: disable=missing-docstring,broad-except,import-outside-toplevel
 
+import email.policy
 import itertools
 import json
 import logging
-from email import policy
-from email.generator import Generator
+from email import message_from_bytes, policy
+from email.generator import BytesGenerator, Generator
 from email.parser import Parser
 from importlib import reload
 from pathlib import Path
@@ -21,7 +22,7 @@ from libratom.lib import EmlArchive, MboxArchive, PffArchive
 from libratom.lib.base import Archive, AttachmentMetadata
 from libratom.lib.constants import RATOM_SPACY_MODEL_MAX_LENGTH, SPACY_MODEL_NAMES
 from libratom.lib.exceptions import FileTypeError
-from libratom.lib.pff import pff_msg_to_string
+from libratom.lib.pff import pff_msg_to_bytes, pff_msg_to_string
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +62,6 @@ def get_set_of_files(path: Path) -> Set[Path]:
 
 
 def get_spacy_models() -> Dict[str, List[str]]:
-
     releases = {}
 
     paginated_url = "https://api.github.com/repos/explosion/spacy-models/releases?page=1&per_page=100"
@@ -138,7 +138,6 @@ def load_spacy_model(spacy_model_name: str) -> Optional[Language]:
 
             # Specific steps for transformer models (very brittle and likely not permanent)
             if spacy_model_name.endswith("_trf"):
-
                 # If we just installed a transformer model along with spacy-transformers in a child process
                 # we need to set up an entry point for spacy-transformers in the current process.
                 # This entry point will be registered as a pipeline factory function by the model's language class.
@@ -217,7 +216,11 @@ def export_messages_from_file(
                             (attachments_folder / attachment.name).write_bytes(buffer)
 
                     # Convert message to Python Message type
-                    msg = Parser(policy=policy.default).parsestr(pff_msg_to_string(msg))
+                    msg = pff_msg_to_bytes(msg)
+
+                    with (dest_folder / f"{msg_id}.eml").open("wb") as eml_file:
+                        eml_file.write(msg)
+                    continue
 
                 # Write message as eml file
                 with (dest_folder / f"{msg_id}.eml").open(
